@@ -19,7 +19,7 @@ import random
 import copy
 from PIL import Image
 from .text_image_aug import tia_perspective, tia_stretch, tia_distort
-
+import cmapy
 
 class RecAug(object):
     def __init__(self, use_tia=True, aug_prob=0.4, **kwargs):
@@ -206,7 +206,53 @@ class PRENResizeImg(object):
         data['image'] = resized_img.astype(np.float32)
         return data
 
+class ColorMapImg(object):
+    def __init__(self, prob=0.5,**kwargs):
+        self.prob = prob
+        # this should be created by a loop, but I think its too slow
+        self.color_map = ['viridis', 'plasma', 'inferno', 'magma', 'cividis', 'viridis_r', 'plasma_r', 'inferno_r', 'magma_r', 'cividis_r', 'Greys', 'Purples', 'Blues', 'Greens', 'Oranges', 'Reds', 'YlOrBr', 'YlOrRd', 'OrRd', 'PuRd', 'RdPu', 'BuPu', 'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn', 'Greys_r', 'Purples_r', 'Blues_r', 'Greens_r', 'Oranges_r', 'Reds_r', 'YlOrBr_r', 'YlOrRd_r', 'OrRd_r', 'PuRd_r', 'RdPu_r', 'BuPu_r', 'GnBu_r', 'PuBu_r', 'YlGnBu_r', 'PuBuGn_r', 'BuGn_r', 'YlGn_r', 'binary', 'gist_yarg', 'gist_gray', 'gray', 'bone', 'pink', 'spring', 'summer', 'autumn', 'winter', 'cool', 'Wistia', 'hot', 'afmhot', 'gist_heat', 'copper', 'binary_r', 'gist_yarg_r', 'gist_gray_r', 'gray_r', 'bone_r', 'pink_r', 'spring_r', 'summer_r', 'autumn_r', 'winter_r', 'cool_r', 'Wistia_r', 'hot_r', 'afmhot_r', 'gist_heat_r', 'copper_r', 'PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu', 'RdYlBu', 'RdYlGn', 'Spectral', 'coolwarm', 'bwr', 'seismic', 'PiYG_r', 'PRGn_r', 'BrBG_r', 'PuOr_r', 'RdGy_r', 'RdBu_r', 'RdYlBu_r', 'RdYlGn_r', 'Spectral_r', 'coolwarm_r', 'bwr_r', 'seismic_r', 'Pastel1', 'Pastel2', 'Paired', 'Accent', 'Dark2', 'Set1', 'Set2', 'Set3', 'tab10', 'tab20', 'tab20b', 'tab20c', 'Pastel1_r', 'Pastel2_r', 'Paired_r', 'Accent_r', 'Dark2_r', 'Set1_r', 'Set2_r', 'Set3_r', 'tab10_r', 'tab20_r', 'tab20b_r', 'tab20c_r', 'flag', 'prism', 'ocean', 'gist_earth', 'terrain', 'gist_stern', 'gnuplot', 'gnuplot2', 'CMRmap', 'cubehelix', 'brg', 'hsv', 'gist_rainbow', 'rainbow', 'jet', 'nipy_spectral', 'gist_ncar', 'flag_r', 'prism_r', 'ocean_r', 'gist_earth_r', 'terrain_r', 'gist_stern_r', 'gnuplot_r', 'gnuplot2_r', 'CMRmap_r', 'cubehelix_r', 'brg_r', 'hsv_r', 'gist_rainbow_r', 'rainbow_r', 'jet_r', 'nipy_spectral_r', 'gist_ncar_r']
+    def __call__(self,data):
+        img = data['image']
+        if np.random.uniform(0,1) < self.prob:
+            img_colorized = cmapy.colorize(img, random.choice(self.color_map))
+            data['image'] = img_colorized
+        return data
+    
+    def _create_color_map(self):
+        lst_color = []
+        for group in cmapy.cmap_groups:
+                for cmap_name in group["colormaps"]:
+                    lst_color.append(cmap_name)
+        return lst_color
 
+class RandomResize(object):
+    def __init__(self, prob=0.5, min_scale=0.5, max_scale=2.0,**kwargs):
+        self.prob = prob
+        self.min_scale = min_scale
+        self.max_scale = max_scale
+
+    def __call__(self, data):
+        img = data['image']
+        if np.random.uniform(0,1) < self.prob:
+            h, w = img.shape[:2]
+            scale = np.random.uniform(self.min_scale, self.max_scale)
+            img = cv2.resize(img, (int(w*scale), int(h*scale)))
+            data['image'] = img
+        return data
+    
+class ConvertGray(object):
+    def __init__(self, prob=0.5, min_scale=0.5, max_scale=2.0,**kwargs):
+        self.prob = prob
+
+    def __call__(self, data):
+        img = data['image']
+        if np.random.uniform(0,1) < self.prob:
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            # convert back to 3 channels
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+            data['image'] = img
+        return data
+    
 class SVTRRecResizeImg(object):
     def __init__(self, image_shape, padding=True, **kwargs):
         self.image_shape = image_shape

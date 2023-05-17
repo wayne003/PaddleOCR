@@ -1,0 +1,1 @@
+python3 tools/infer_rec.py -c /ocr_7segments/model/svtr_tiny_digital/config.yml -o Global.pretrained_model=/ocr_7segments/model/svtr_tiny_digital/best_accuracy  Global.infer_img=/ocr_7segments/testcase/easy_test_7seg.jpg

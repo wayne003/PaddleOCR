@@ -21,6 +21,7 @@ import numpy as np
 import os
 import sys
 import json
+import cv2
 
 __dir__ = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(__dir__)
@@ -36,6 +37,7 @@ from ppocr.postprocess import build_post_process
 from ppocr.utils.save_load import load_model
 from ppocr.utils.utility import get_image_file_list
 import tools.program as program
+
 
 
 def main():
@@ -101,68 +103,67 @@ def main():
         transforms.append(op)
     global_config['infer_mode'] = True
     ops = create_operators(transforms, global_config)
-
     save_res_path = config['Global'].get('save_res_path',
                                          "./output/rec/predicts_rec.txt")
     if not os.path.exists(os.path.dirname(save_res_path)):
         os.makedirs(os.path.dirname(save_res_path))
 
     model.eval()
+    lst_img_path = ['/project/testcases/20230517113245.jpg','/project/testcases/minus20_lcd.jpg']
+    ops = ops[1:]
+    for file in lst_img_path:
+        logger.info("infer_img: {}".format(file))
+        with open(file, 'rb') as f:
+            #img = f.read()
+            img = cv2.imread(file)
+            data = {'image': img}
+        
+        batch = transform(data, ops)
+        if config['Architecture']['algorithm'] == "SRN":
+            encoder_word_pos_list = np.expand_dims(batch[1], axis=0)
+            gsrm_word_pos_list = np.expand_dims(batch[2], axis=0)
+            gsrm_slf_attn_bias1_list = np.expand_dims(batch[3], axis=0)
+            gsrm_slf_attn_bias2_list = np.expand_dims(batch[4], axis=0)
 
-    with open(save_res_path, "w") as fout:
-        for file in get_image_file_list(config['Global']['infer_img']):
-            logger.info("infer_img: {}".format(file))
-            with open(file, 'rb') as f:
-                img = f.read()
-                data = {'image': img}
-            batch = transform(data, ops)
-            if config['Architecture']['algorithm'] == "SRN":
-                encoder_word_pos_list = np.expand_dims(batch[1], axis=0)
-                gsrm_word_pos_list = np.expand_dims(batch[2], axis=0)
-                gsrm_slf_attn_bias1_list = np.expand_dims(batch[3], axis=0)
-                gsrm_slf_attn_bias2_list = np.expand_dims(batch[4], axis=0)
+            others = [
+                paddle.to_tensor(encoder_word_pos_list),
+                paddle.to_tensor(gsrm_word_pos_list),
+                paddle.to_tensor(gsrm_slf_attn_bias1_list),
+                paddle.to_tensor(gsrm_slf_attn_bias2_list)
+            ]
+        if config['Architecture']['algorithm'] == "SAR":
+            valid_ratio = np.expand_dims(batch[-1], axis=0)
+            img_metas = [paddle.to_tensor(valid_ratio)]
 
-                others = [
-                    paddle.to_tensor(encoder_word_pos_list),
-                    paddle.to_tensor(gsrm_word_pos_list),
-                    paddle.to_tensor(gsrm_slf_attn_bias1_list),
-                    paddle.to_tensor(gsrm_slf_attn_bias2_list)
-                ]
-            if config['Architecture']['algorithm'] == "SAR":
-                valid_ratio = np.expand_dims(batch[-1], axis=0)
-                img_metas = [paddle.to_tensor(valid_ratio)]
+        images = np.expand_dims(batch[0], axis=0)
+        images = paddle.to_tensor(images)
+        if config['Architecture']['algorithm'] == "SRN":
+            preds = model(images, others)
+        elif config['Architecture']['algorithm'] == "SAR":
+            preds = model(images, img_metas)
+        else:
+            preds = model(images)
+        post_result = post_process_class(preds)
+        info = None
+        if isinstance(post_result, dict):
+            rec_info = dict()
+            for key in post_result:
+                if len(post_result[key][0]) >= 2:
+                    rec_info[key] = {
+                        "label": post_result[key][0][0],
+                        "score": float(post_result[key][0][1]),
+                    }
+            info = json.dumps(rec_info, ensure_ascii=False)
+        else:
+            if len(post_result[0]) >= 2:
+                info = post_result[0][0] + "\t" + str(post_result[0][1])
 
-            images = np.expand_dims(batch[0], axis=0)
-            images = paddle.to_tensor(images)
-            if config['Architecture']['algorithm'] == "SRN":
-                preds = model(images, others)
-            elif config['Architecture']['algorithm'] == "SAR":
-                preds = model(images, img_metas)
-            else:
-                preds = model(images)
-            post_result = post_process_class(preds)
-            info = None
-            if isinstance(post_result, dict):
-                rec_info = dict()
-                for key in post_result:
-                    if len(post_result[key][0]) >= 2:
-                        rec_info[key] = {
-                            "label": post_result[key][0][0],
-                            "score": float(post_result[key][0][1]),
-                        }
-                info = json.dumps(rec_info, ensure_ascii=False)
-            else:
-                if len(post_result[0]) >= 2:
-                    info = post_result[0][0] + "\t" + str(post_result[0][1])
-
-            if info is not None:
-                logger.info("\t result: {}".format(info))
-                fout.write(file + "\t" + info + "\n")
+        if info is not None:
+            logger.info("\t result: {}".format(info))
     logger.info("success!")
 
 
 if __name__ == '__main__':
     config, device, logger, vdl_writer = program.preprocess()
     main()
-    print(config)
 

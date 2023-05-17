@@ -295,7 +295,7 @@ def parse_args(mMain=True):
         '3. PP-OCR support Chinese detection, recognition and direction classifier and multilingual recognition model.'
     )
     parser.add_argument(
-        "--structure_version",
+        "--structure_version",x
         type=str,
         choices=SUPPORT_STRUCTURE_MODEL_VERSION,
         default='PP-STRUCTURE',

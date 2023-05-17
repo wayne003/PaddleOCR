@@ -29,6 +29,8 @@ class Im2Seq(nn.Layer):
         self.out_channels = in_channels
 
     def forward(self, x):
+        if isinstance(x, tuple):
+            x = x[0]
         B, C, H, W = x.shape
         assert H == 1
         x = x.squeeze(axis=2)
